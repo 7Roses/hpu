@@ -56,4 +56,24 @@ vector.crossProduct = function(self,otherVector)
 	});
 end;
 
+-- functions to get vectors of equations. (can be used to calculate points for every x,y,z for a given t value)
+vector.math = {};
+vector.math.lineEquationTable = function(p1,p2)
+	local beginV = p1;
+	local endV = p2;
+	local totalV = endV:subtract(beginV);
+
+	local f = function(t,ind) return beginV.value[ind] + (totalV.value[ind] * t) end; -- the equation for a line
+	
+	-- find the minimum step size
+	local maxima = 0;
+	for k,v in pairs(totalV.value) do
+	  if v>maxima then maxima=v end
+	end;
+	local stepSize = (1.0 / maxima)/2 ;
+	
+	-- run the stepsize till 1
+	return {x=(function(i) return f(i,"x") end),y=(function(i) return f(i,"y") end),z=(function(i) return f(i,"z") end),step=stepSize};
+end;
+
 return vector;
