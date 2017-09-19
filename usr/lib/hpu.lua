@@ -10,11 +10,11 @@ local betweenStartAndEnd = function(minima,actual,maxima)
 	return actual>=minima and actual < maxima;
 end
 
-
-
 local hpu = {};
 
 hpu.holograms={};
+
+
 
 hpu.bind = function(comp,x,y,z)
   table.insert(hpu.holograms,{h=comp,x=x-1,z=z-1,y=y-1});
@@ -60,15 +60,23 @@ hpu.get = function(x,y,z)
   return nil,"no hologram configured for this range";
 end;
 
-hpu.fill = function(arg)
-
-	local x,z,minY,maxY,value = arg.x,arg.z,arg.minY,arg.maxY,arg.value;
+hpu.fill = function(x,z,minY,maxY,value)
+	checkArg(1,x,"number");
+	checkArg(2,z,"number");
+	checkArg(3,minY,"number","nil");
+	checkArg(4,maxY,"number");
+	checkArg(5,value,"number","boolean");
+		
+	-- two ways possible:
+	---- easy -> just loop over them and use the 'set' function
+	---- hard -> find out on what holograms you need to set what fill command, and then call them with calculated values.
 	
+	-- first version will contain the easy one :)
+	for t=minY or 1,maxY+1,1 do
+		hpu.set(x,t,z,value);
+	end;
 end;
 --[[
-fill(x:number, z:number[, minY:number], maxY:number, value:number)
-Fills an interval in the specified column column with the specified value. Will overwrite only the voxels in the interval. If minY is omitted it defaults to 1. The two interval ends are inclusive.
-Note: Before 1.3.3 there was no minY argument and all voxels below and including the specified height would be set, all voxels above would be unset.
 copy(x:number, z:number, sx:number, sz:number, tx:number, tz:number)
 Copies an area of columns by the specified translation.
 getScale():number
@@ -93,8 +101,8 @@ local getMaxima = function()
 	end
 	return {maxX=maxX,maxY=maxY,maxZ=maxZ};
 end
-local thread = require("thread");
 hpu.diagnostic = function()
+	local thread = require("thread");
 	local maxima = getMaxima();
 	local maxX,maxZ,maxY = maxima.maxX,maxima.maxZ,maxima.maxY;
 	
