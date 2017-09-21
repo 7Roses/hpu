@@ -95,7 +95,7 @@ hpu.set = function(x,y,z,value)
 		end;
 		local found = has_value(h.palette,value)
 		if found ~=nil then
-			print("found it at index:"..found);
+			if hpu.debug then print("found it at index:"..found) end;
 			h.h.set(lx,ly,lz,found);
 		end
 	  end
