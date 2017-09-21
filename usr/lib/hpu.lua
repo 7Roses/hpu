@@ -10,23 +10,74 @@ local betweenStartAndEnd = function(minima,actual,maxima)
 	return actual>=minima and actual < maxima;
 end
 
+local function has_value (tab, val)
+    for index, value in ipairs(tab) do
+        if value == val then
+            return index;
+        end
+    end
+    return nil;
+end
+
 local hpu = {};
-
+hpu.version = 0.3;
 hpu.holograms={};
-
-
-
-hpu.bind = function(comp,x,y,z)
-  table.insert(hpu.holograms,{h=comp,x=x-1,z=z-1,y=y-1});
+hpu.palette = {};-- the global color palette, entries will be changed by: a bind comand or by the setPaletteColor function.
+hpu.bind = function(comp,x,y,z,palette)
+	local colorpalette = palette or {1}; -- if none are set, the first in the whole palette is used.
+  if (comp.maxDepth()== 1.0) then 
+	print("WARNING!, only 1 of the palette can be used, this hologram doesn't support any more.");
+	colorpalette = {palette[1] or {1}}
+  end
+  hpu.holograms[comp.address] = {h=comp,x=x-1,z=z-1,y=y-1,palette=colorpalette};
   print("added an hologram with cordinates: ",x,y,z);
   print("calculated maximums would be: ",x+47,z+47,y+31);
+  print("color depth:" .. comp.maxDepth());
+  
+  for k,v in pairs(colorpalette) do
+	hpu.palette[v] = comp.getPaletteColor(k);
+	print("configured color: " .. hpu.palette[v] .." with index: "..v);
+  end
 end
+
+--[[ use this if you set the colors befor binding to the hpu, but don't want to use the hpu.setPaletteColor, or want to be save that all the colors are set right.]]
+hpu.initColors = function()
+	for k, h in pairs(hpu.holograms) do
+	  
+		if hpu.debug then 
+			print(value);
+		end;
+		local found = has_value(h.palette,value)
+		if found ~=nil then
+			h.h.setPaletteColor(found,hpu.palette[value]);
+		end
+	end
+end;
+
+hpu.setPaletteColor = function(index, value)
+	hpu.palette[index] = value;
+	hpu.initColors();
+end;
+hpu.getPaletteColor = function(index)
+	return hpu.palette[index];
+end;
+
 
 hpu.clear = function()
 	for k, h in pairs(hpu.holograms) do
 		h.h.clear();
 	end
 end;
+
+hpu.setModeMultiColor = function(multiColorEnabled)
+	if multiColorEnabled then
+		hpu.multiColor = true;
+	else
+		hpu.multiColor = false;
+	end;
+end;
+-- default we set it to nonmuulticolored
+hpu.setModeMultiColor(false);
 
 
 hpu.set = function(x,y,z,value)
@@ -38,15 +89,22 @@ hpu.set = function(x,y,z,value)
 		and betweenStartAndEnd(h.y,y0,h.y+32)
 	  ) then
 	    local lx,ly,lz = (x0%48)+1, (y0 % 32) + 1, (z0%48)+1;
-		if d then print(x,x0,lx);print(y,y0,ly);print(z,z0,lz);end;
-		if d then print(h.h.address);end;
-	    return h.h.set(lx,ly,lz,value);
+		if hpu.multiColor or not value or value==0 then h.h.set(lx,ly,lz,false) end; -- on multicolor the color needs to be deleted first.
+		if hpu.debug then 
+			print(value);
+		end;
+		local found = has_value(h.palette,value)
+		if found ~=nil then
+			print("found it at index:"..found);
+			h.h.set(lx,ly,lz,found);
+		end
 	  end
 	end
 end;
 
 hpu.get = function(x,y,z)
   local x0,y0,z0 = x-1,y-1,z-1;
+  local result = {};
   for k, h in pairs(hpu.holograms) do
 	  if (
 		betweenStartAndEnd(h.x,x0,h.x+48)
@@ -54,10 +112,11 @@ hpu.get = function(x,y,z)
 		and betweenStartAndEnd(h.y,y0,h.y+32)
 	  ) then
 	    local lx,ly,lz = (x0%48)+1, (y0 % 32)+1, (z0%48)+1;
-	    return h.h.get(lx,ly,lz);
+	    local res = h.h.get(lx,ly,lz);
+		if res then table.insert(result,res); end
 	  end
 	end
-  return nil,"no hologram configured for this range";
+  return res,"no hologram configured for this range";
 end;
 
 hpu.fill = function(x,z,minY,maxY,value)
@@ -76,6 +135,16 @@ hpu.fill = function(x,z,minY,maxY,value)
 		hpu.set(x,t,z,value);
 	end;
 end;
+
+hpu.copy = function(x,z,sx,sz,tx,tz)
+	for ix = 0, sx, 1 do
+		local lx = x + ix;
+		local lz = z; -- reset it to the original z
+		for iz = 0, sz, 1 do
+			-- actual translation/copy of the column.
+		end
+	end
+end
 --[[
 copy(x:number, z:number, sx:number, sz:number, tx:number, tz:number)
 Copies an area of columns by the specified translation.
@@ -107,18 +176,18 @@ hpu.diagnostic = function()
 	local maxX,maxZ,maxY = maxima.maxX,maxima.maxZ,maxima.maxY;
 	
 	-- fill the screen with dots r voxels apart. this will run on a timer to give faster command back to the program (while executed when possible.)
-	local function fill_(r) 
-		print("later callback");
+	local function fill_(r,value) 
+		print("fill thread for color: "..value);
 		for j=1,maxY,r do --y
 			for t=1,maxZ,r do --z
 				for i=1,maxX,r do --x
-					hpu.set(i,j,t,1);
+					hpu.set(i,j,t,value);
 				end
 			end
 		end 
 	end;
-	local function fill(r)
-		local t = thread.create( function() fill_(r) end ):detach();
+	local function fill(r,value)
+		local t = thread.create( function() fill_(r,value) end ):detach();
 	end;
 	local check = function(holo,actual,full)
 	  if (holo.get(actual.x,actual.y,actual.z)~= 1) then
